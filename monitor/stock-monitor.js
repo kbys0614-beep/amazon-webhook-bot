@@ -55,24 +55,6 @@ async function runCheck() {
     await sleep(parseInt(process.env.REQUEST_INTERVAL_MS || '2000'));
   }
 
-  // ===== ヨドバシ =====
-  const yItems = await checkYodobashi();
-
-  for (const item of yItems) {
-    if (item.inStock) {
-      console.log(`[ヨドバシ] 在庫あり: ${item.name}`);
-
-      await notifyInStock({
-        name: item.name,
-        price: null,
-        soldByAmazon: true,
-        url: item.link,
-      });
-
-      stats.totalNotifications++;
-    }
-  }
-
   // ===== エラー管理 =====
   if (errorCount > 0) stats.consecutiveErrors += errorCount;
   else stats.consecutiveErrors = 0;
