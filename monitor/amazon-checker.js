@@ -1,6 +1,8 @@
 'use strict';
+
 const axios = require('axios');
 const cheerio = require('cheerio');
+
 const PRODUCTS = [
   { asin: 'B0G2RSS3HV', name: 'ボンボンドロップシール サンリオ S8815062' },
   { asin: 'B0G2RQL3RG', name: 'ボンボンドロップシール サンリオ S8815070' },
@@ -34,7 +36,9 @@ const PRODUCTS = [
   { asin: 'B0F4CZTGD9', name: 'ボンボンドロップシール たまごっち くちぱっち S8812560' },
   { asin: 'B0F4CZNHWC', name: 'ボンボンドロップシール たまごっち S8812578' },
 ];
-const MAX_PRICE = parseInt(process.env.MAX_PRICE || '550');
+
+const MAX_PRICE = parseInt(process.env.MAX_PRICE || '550', 10);
+
 const REQUEST_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept-Language': 'ja-JP,ja;q=0.9,en;q=0.8',
@@ -42,31 +46,89 @@ const REQUEST_HEADERS = {
   'Accept-Encoding': 'gzip, deflate, br',
   'Cache-Control': 'no-cache',
 };
+
 async function checkProduct(product) {
   const url = `https://www.amazon.co.jp/dp/${product.asin}`;
   let html;
+
   try {
-    const res = await axios.get(url, { headers: REQUEST_HEADERS, timeout: 15000 });
+    const res = await axios.get(url, {
+      headers: REQUEST_HEADERS,
+      timeout: 15000,
+      validateStatus: () => true,
+      maxRedirects: 5,
+    });
+
+    if (res.status >= 400) {
+      console.error(`[checker] ${product.asin} HTTP ${res.status} URL=${url}`);
+      console.error(`[checker] ${product.asin} BODY=${String(res.data).slice(0, 500)}`);
+      return null;
+    }
+
     html = res.data;
   } catch (err) {
-    console.error(`[checker] ${product.asin} エラー: ${err.message}`);
+    console.error(`[checker] ${product.asin} 通信エラー URL=${url}`);
+    console.error(`[checker] ${product.asin} MESSAGE=${err.message}`);
+    console.error(`[checker] ${product.asin} CODE=${err.code || 'N/A'}`);
+    console.error(`[checker] ${product.asin} STATUS=${err.response?.status || 'N/A'}`);
+    console.error(`[checker] ${product.asin} BODY=${String(err.response?.data || '').slice(0, 500)}`);
     return null;
   }
+
   const $ = cheerio.load(html);
+
   const availabilityRaw = $('#availability span').first().text().trim();
-  const inStock = /在庫あり|通常\d+/.test(availabilityRaw) || (availabilityRaw === '' && $('#add-to-cart-button').length > 0);
-  const priceSelectors = ['#priceblock_ourprice','#priceblock_dealprice','.a-price .a-offscreen','#price_inside_buybox','#corePrice_feature_div .a-price .a-offscreen','.priceToPay .a-offscreen'];
+
+  const inStock =
+    /在庫あり|通常\d+/.test(availabilityRaw) ||
+    (availabilityRaw === '' && $('#add-to-cart-button').length > 0);
+
+  const priceSelectors = [
+    '#priceblock_ourprice',
+    '#priceblock_dealprice',
+    '.a-price .a-offscreen',
+    '#price_inside_buybox',
+    '#corePrice_feature_div .a-price .a-offscreen',
+    '.priceToPay .a-offscreen',
+  ];
+
   let priceText = '';
   for (const sel of priceSelectors) {
     const t = $(sel).first().text().trim();
-    if (t) { priceText = t; break; }
+    if (t) {
+      priceText = t;
+      break;
+    }
   }
-  const price = priceText ? parseInt(priceText.replace(/[^0-9]/g, ''), 10) : null;
-  const merchantText = [$('#merchant-info').text(), $('#tabular-buybox').text(), $('#desktop_qualifiedBuyBox').text()].join(' ');
-  const soldByAmazon = merchantText.includes('Amazon.co.jp') || merchantText.includes('Amazon Japan');
+
+  const price = priceText
+    ? parseInt(priceText.replace(/[^0-9]/g, ''), 10)
+    : null;
+
+  const merchantText = [
+    $('#merchant-info').text(),
+    $('#tabular-buybox').text(),
+    $('#desktop_qualifiedBuyBox').text(),
+  ].join(' ');
+
+  const soldByAmazon =
+    merchantText.includes('Amazon.co.jp') ||
+    merchantText.includes('Amazon Japan');
+
   const isListPrice = price !== null && price <= MAX_PRICE;
-  return { asin: product.asin, name: product.name, inStock, price, soldByAmazon, isListPrice, availabilityRaw, url };
+
+  return {
+    asin: product.asin,
+    name: product.name,
+    inStock,
+    price,
+    soldByAmazon,
+    isListPrice,
+    availabilityRaw,
+    url,
+  };
 }
+
 function shouldNotify(result) {
   if (!result) return false;
   if (!result.inStock) return false;
@@ -74,4 +136,9 @@ function shouldNotify(result) {
   if (process.env.REQUIRE_SOLD_BY_AMAZON !== 'false' && !result.soldByAmazon) return false;
   return true;
 }
-module.exports = { PRODUCTS, checkProduct, shouldNotify };
+
+module.exports = {
+  PRODUCTS,
+  checkProduct,
+  shouldNotify,
+};
