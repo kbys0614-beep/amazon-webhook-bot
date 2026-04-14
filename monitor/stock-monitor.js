@@ -52,7 +52,7 @@ async function runCheck() {
       state.lastInStock = false;
     }
 
-    await sleep(parseInt(process.env.REQUEST_INTERVAL_MS || '3000'));
+    await sleep(parseInt(process.env.REQUEST_INTERVAL_MS || '2000'));
   }
 
   // ===== ヨドバシ =====
@@ -86,7 +86,7 @@ async function runCheck() {
 }
 
 function startMonitor() {
-  const schedule = process.env.CRON_SCHEDULE || '*/10 * * * *';
+  const schedule = process.env.CRON_SCHEDULE || '*/7 * * * *';
   console.log(`[monitor] 監視開始: スケジュール="${schedule}" 対象=${PRODUCTS.length}商品`);
   runCheck();
   cron.schedule(schedule, runCheck, { timezone: 'Asia/Tokyo' });
