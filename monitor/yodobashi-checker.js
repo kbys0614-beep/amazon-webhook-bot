@@ -11,7 +11,7 @@ async function checkYodobashi() {
       headers: {
         'User-Agent': 'Mozilla/5.0',
       },
-      timeout: 10000,
+      timeout: 30000,
     });
 
     const $ = cheerio.load(res.data);
