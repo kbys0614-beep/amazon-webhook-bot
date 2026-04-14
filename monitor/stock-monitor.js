@@ -27,15 +27,19 @@ async function runCheck() {
 
   let errorCount = 0;
 
+  // ===== Amazon =====
   for (const product of PRODUCTS) {
     const result = await checkProduct(product);
+
     if (!result) {
       errorCount++;
       await sleep(3000);
       continue;
     }
+
     const state = productStates.get(product.asin);
     const notify = shouldNotify(result);
+
     if (notify) {
       if (!state.lastInStock) {
         console.log(`[monitor] 🎉 在庫復活: ${product.name}`);
@@ -47,9 +51,29 @@ async function runCheck() {
     } else {
       state.lastInStock = false;
     }
+
     await sleep(parseInt(process.env.REQUEST_INTERVAL_MS || '3000'));
   }
 
+  // ===== ヨドバシ =====
+  const yItems = await checkYodobashi();
+
+  for (const item of yItems) {
+    if (item.inStock) {
+      console.log(`[ヨドバシ] 在庫あり: ${item.name}`);
+
+      await notifyInStock({
+        name: item.name,
+        price: null,
+        soldByAmazon: true,
+        url: item.link,
+      });
+
+      stats.totalNotifications++;
+    }
+  }
+
+  // ===== エラー管理 =====
   if (errorCount > 0) stats.consecutiveErrors += errorCount;
   else stats.consecutiveErrors = 0;
 
@@ -62,7 +86,7 @@ async function runCheck() {
 }
 
 function startMonitor() {
-  const schedule = process.env.CRON_SCHEDULE || '*/7 * * * *';
+  const schedule = process.env.CRON_SCHEDULE || '*/10 * * * *';
   console.log(`[monitor] 監視開始: スケジュール="${schedule}" 対象=${PRODUCTS.length}商品`);
   runCheck();
   cron.schedule(schedule, runCheck, { timezone: 'Asia/Tokyo' });
