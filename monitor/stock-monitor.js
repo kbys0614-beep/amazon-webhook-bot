@@ -3,7 +3,6 @@
 const cron = require('node-cron');
 const { PRODUCTS, checkProduct, shouldNotify } = require('./amazon-checker');
 const { notifyInStock, notifyError } = require('./line-notifier');
-const { checkYodobashi } = require('./yodobashi-checker');
 
 const productStates = new Map(
   PRODUCTS.map(p => [p.asin, { lastInStock: false, notifiedAt: null }])
