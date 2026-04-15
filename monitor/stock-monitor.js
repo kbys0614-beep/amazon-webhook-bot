@@ -27,7 +27,6 @@ async function runCheck() {
   stats.lastCheckAt = new Date().toISOString();
   const jst = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
   console.log(`\n[monitor] === チェック #${stats.totalChecks} 開始 (${jst}) ===`);
-
   let errorCount = 0;
   const checkResult = {
     checkNo: stats.totalChecks,
@@ -36,7 +35,6 @@ async function runCheck() {
     inStockItems: [],
     errorCount: 0,
   };
-
   for (const product of PRODUCTS) {
     const result = await checkProduct(product);
     if (!result) {
@@ -47,4 +45,49 @@ async function runCheck() {
     const state = productStates.get(product.asin);
     const notify = shouldNotify(result);
     if (notify) {
-      checkResult.inStockItems.push({ asin: product.asin, name: product.name, price: result.pri
+      checkResult.inStockItems.push({ asin: product.asin, name: product.name, price: result.price });
+      if (!state.lastInStock) {
+        console.log(`[monitor] 在庫復活: ${product.name}`);
+        await notifyInStock(result);
+        state.notifiedAt = new Date().toISOString();
+        stats.totalNotifications++;
+      }
+      state.lastInStock = true;
+    } else {
+      state.lastInStock = false;
+    }
+    await sleep(3000);
+  }
+  checkResult.errorCount = errorCount;
+  checkHistory.unshift(checkResult);
+  if (checkHistory.length > MAX_HISTORY) checkHistory.pop();
+  if (errorCount > 0) stats.consecutiveErrors += errorCount;
+  else stats.consecutiveErrors = 0;
+  if (stats.consecutiveErrors >= 30) {
+    await notifyError(`連続してAmazonページ取得に失敗しています（失敗数: ${stats.consecutiveErrors}）`);
+    stats.consecutiveErrors = 0;
+  }
+  console.log(`[monitor] === チェック完了 (失敗: ${errorCount}/${PRODUCTS.length}) ===\n`);
+}
+
+function startMonitor() {
+  const schedule = '*/7 * * * *';
+  console.log(`[monitor] 監視開始: スケジュール="${schedule}" 対象=${PRODUCTS.length}商品`);
+  runCheck();
+  cron.schedule(schedule, runCheck, { timezone: 'Asia/Tokyo' });
+}
+
+function getStatus() {
+  const states = {};
+  for (const [asin, state] of productStates.entries()) {
+    states[asin] = state;
+  }
+  return {
+    stats,
+    totalProducts: PRODUCTS.length,
+    productStates: states,
+    recentHistory: checkHistory,
+  };
+}
+
+module.exports = { startMonitor, getStatus };
