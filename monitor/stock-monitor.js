@@ -15,6 +15,10 @@ const stats = {
   lastCheckAt: null,
 };
 
+// 直近100件のチェック履歴
+const checkHistory = [];
+const MAX_HISTORY = 100;
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -22,24 +26,29 @@ function sleep(ms) {
 async function runCheck() {
   stats.totalChecks++;
   stats.lastCheckAt = new Date().toISOString();
-  console.log(`\n[monitor] === チェック #${stats.totalChecks} 開始 ===`);
+  const jst = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  console.log(`\n[monitor] === チェック #${stats.totalChecks} 開始 (${jst}) ===`);
 
   let errorCount = 0;
+  const checkResult = {
+    checkNo: stats.totalChecks,
+    checkedAt: stats.lastCheckAt,
+    checkedAtJST: jst,
+    inStockItems: [],
+    errorCount: 0,
+  };
 
-  // ===== Amazon =====
   for (const product of PRODUCTS) {
     const result = await checkProduct(product);
-
     if (!result) {
       errorCount++;
       await sleep(3000);
       continue;
     }
-
     const state = productStates.get(product.asin);
     const notify = shouldNotify(result);
-
     if (notify) {
+      checkResult.inStockItems.push({ asin: product.asin, name: product.name, price: result.price });
       if (!state.lastInStock) {
         console.log(`[monitor] 🎉 在庫復活: ${product.name}`);
         await notifyInStock(result);
@@ -50,11 +59,15 @@ async function runCheck() {
     } else {
       state.lastInStock = false;
     }
-
-    await sleep(parseInt(process.env.REQUEST_INTERVAL_MS || '2000'));
+    await sleep(parseInt(process.env.REQUEST_INTERVAL_MS || '3000'));
   }
 
-  // ===== エラー管理 =====
+  checkResult.errorCount = errorCount;
+
+  // 履歴に追加（最大100件）
+  checkHistory.unshift(checkResult);
+  if (checkHistory.length > MAX_HISTORY) checkHistory.pop();
+
   if (errorCount > 0) stats.consecutiveErrors += errorCount;
   else stats.consecutiveErrors = 0;
 
@@ -78,7 +91,12 @@ function getStatus() {
   for (const [asin, state] of productStates.entries()) {
     states[asin] = state;
   }
-  return { stats, totalProducts: PRODUCTS.length, productStates: states };
+  return {
+    stats,
+    totalProducts: PRODUCTS.length,
+    productStates: states,
+    recentHistory: checkHistory,
+  };
 }
 
 module.exports = { startMonitor, getStatus };
