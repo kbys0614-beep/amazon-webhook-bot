@@ -5,12 +5,8 @@ const axios = require('axios');
 const LINE_API = 'https://api.line.me/v2/bot/message/push';
 
 async function sendLineNotification(message) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const userId = process.env.LINE_USER_ID;
-  if (!token || !userId) {
-    console.error('[line-notifier] LINE_CHANNEL_ACCESS_TOKEN または LINE_USER_ID が未設定です');
-    return false;
-  }
+  const token = 'Ni1Xbfumk35AeFryJR58Plm7XdTV70cGcYOzDrg6NN21RPYFGe8tzilz+keYRDtGRg8H4NHpL07CEdN5NGjmCYn9q5+rM4mwc8EAXMM5UG9RqteQ3iQ0Yu65w8o8N9yBiqIHdBjVdxbeXNWquimISwdB04t89/1O/w1cDnyilFU=';
+  const userId = 'Ub569c1d4ef618a4c4dbdb173f602c1bd';
   try {
     await axios.post(LINE_API, {
       to: userId,
