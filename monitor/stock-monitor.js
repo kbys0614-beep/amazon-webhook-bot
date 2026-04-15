@@ -17,6 +17,7 @@ const stats = {
 
 const checkHistory = [];
 const MAX_HISTORY = 100;
+let errorNotified = false; // エラー通知済みフラグ（連続通知防止）
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -39,7 +40,7 @@ async function runCheck() {
     const result = await checkProduct(product);
     if (!result) {
       errorCount++;
-      await sleep(3000);
+      await sleep(5000);
       continue;
     }
     const state = productStates.get(product.asin);
@@ -56,22 +57,29 @@ async function runCheck() {
     } else {
       state.lastInStock = false;
     }
-    await sleep(3000);
+    await sleep(5000); // 5秒に延長してBOT判定回避
   }
   checkResult.errorCount = errorCount;
   checkHistory.unshift(checkResult);
   if (checkHistory.length > MAX_HISTORY) checkHistory.pop();
-  if (errorCount > 0) stats.consecutiveErrors += errorCount;
-  else stats.consecutiveErrors = 0;
-  if (stats.consecutiveErrors >= 30) {
-    await notifyError(`連続してAmazonページ取得に失敗しています（失敗数: ${stats.consecutiveErrors}）`);
+
+  if (errorCount >= PRODUCTS.length) {
+    // 全商品エラーの場合のみ通知（1回だけ）
+    stats.consecutiveErrors++;
+    if (!errorNotified) {
+      await notifyError(`Amazonへのアクセスがブロックされている可能性があります。しばらく待って自動復旧を確認してください。`);
+      errorNotified = true;
+    }
+  } else {
     stats.consecutiveErrors = 0;
+    errorNotified = false; // 正常に戻ったらフラグリセット
   }
+
   console.log(`[monitor] === チェック完了 (失敗: ${errorCount}/${PRODUCTS.length}) ===\n`);
 }
 
 function startMonitor() {
-  const schedule = '*/7 * * * *';
+  const schedule = '*/10 * * * *'; // 10分ごとに変更（BOT判定回避）
   console.log(`[monitor] 監視開始: スケジュール="${schedule}" 対象=${PRODUCTS.length}商品`);
   runCheck();
   cron.schedule(schedule, runCheck, { timezone: 'Asia/Tokyo' });
